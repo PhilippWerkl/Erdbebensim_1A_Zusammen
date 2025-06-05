@@ -10,7 +10,7 @@ namespace PP_Integrator_Test1
     // Unterstützt Sinus, Double-Sinus, Impuls, Dateiimport.
     public class ErregerFunktion
     {
-        private readonly double h;
+        private readonly double h = 1e-5;
         private Func<double, double> positionFunc = _ => 0.0;
 
         public Func<double, double> Position { get; private set; }
@@ -53,10 +53,10 @@ namespace PP_Integrator_Test1
 
         public static ErregerFunktion Rechteckimpuls(double amplitude, double dauer)
         {
-            return new ErregerFunktion(
-            t => (t < dauer) ? amplitude : 0,
-            t => 0); // Geschwindigkeit ist 0 bei idealem Rechteckimpuls);
-
+            Func<double, double> pos = t => (t < dauer) ? amplitude : 0;
+            var ef = new ErregerFunktion(pos, _ => 0);  // velocity wird gleich überschrieben
+            ef.SetPositionFunction(pos);                // erzeugt auch Velocity & Acceleration
+            return ef;
         }
 
         // Lädt eine Zeitreihe aus einer CSV-Datei (t[s], displacement[m]) und interpoliert sie linear.

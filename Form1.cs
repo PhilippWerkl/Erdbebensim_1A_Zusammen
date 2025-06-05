@@ -23,10 +23,27 @@ namespace Erdbebensim.Zusaammen_GUI___Vis_
         private const double MaxDamping = 1e5;      // max. 100 000 Ns/m
         private const double StabilityLimitZ0 = 2.83;   //Stabilitätsgrenze für RK4
         private int currentScrollY = 0;
+        private double excitationAmplitude = 2.0;
+        private double excitationFrequency = 1.0;
+        private const int DefaultFloors = 15;
+        private const double DefaultMass = 1400;
+        private const double DefaultSpring = 10000;
+        private const double DefaultDamping = 10;
+        private const double DefaultAmplitude = 0.15;
+        private const double DefaultFrequency = 1;
+
 
         public Form1()
         {
             InitializeComponent();
+
+            //Events für RadioButtons
+            rbSinus.CheckedChanged += RadioButton_CheckedChanged;
+            rbDoubleSinus.CheckedChanged += RadioButton_CheckedChanged;
+            rbSquare.CheckedChanged += RadioButton_CheckedChanged;
+
+            // Eine Funktion aktivieren, damit direkt was passiert
+            rbSinus.Checked = true;
 
             // Mausevents für Drag & Zoom
             mouseTweaks.Attach(pictureBoxSimulation);
@@ -40,7 +57,6 @@ namespace Erdbebensim.Zusaammen_GUI___Vis_
             // Button-Events
             btnStart.Click += btnStart_Click;
             btnStop.Click += btnStop_Click;
-            btnClose.Click += btnClose_Click;
 
             // Tooltips
             toolTip1.AutoPopDelay = 10000;
@@ -55,9 +71,7 @@ namespace Erdbebensim.Zusaammen_GUI___Vis_
 
             statusLamp.BackColor = Color.Red;
 
-            // Standardwerte festlegen
-            n = 15;
-            txtFloors.Text = n.ToString();
+           
         }
 
         private void Form1_Load(object sender, EventArgs e)
@@ -66,9 +80,11 @@ namespace Erdbebensim.Zusaammen_GUI___Vis_
             pictureBoxSimulation.Resize += pictureBoxSimulation_Resize;
 
             // Bodenanregung definieren
-            erreger = ErregerFunktion.Sinus(0.1, 1.0);
+            erreger = ErregerFunktion.Sinus(DefaultAmplitude, DefaultFrequency);
+
 
             // Gebäude und Integrator initialisieren
+            n = DefaultFloors;
             building = new Building(n);
             building.SetDefaultParameters(1400, 10000, 10);
             building.ResetState();
@@ -193,109 +209,113 @@ namespace Erdbebensim.Zusaammen_GUI___Vis_
             toolTip1.SetToolTip(statusLamp, "Simulation läuft");
 
             MessageBox.Show("Zufällige Parameter gesetzt!", "Randomizer", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            txtFloors.Text = "";
+            txtMass.Text = "";
+            txtSpring.Text = "";
+            txtDamping.Text = "";
+            txtAmp.Text = "";
+            txtFreq.Text = "";
+
         }
 
         private void btnApplyParameters_Click(object sender, EventArgs e)
         {
-            try
-            {
-                // 1) Parsen (kann FormatException oder OverflowException werfen)
-                int floors = int.Parse(txtFloors.Text);
-                double mass = double.Parse(txtMass.Text);
-                double spring = double.Parse(txtSpring.Text);
-                double damping = double.Parse(txtDamping.Text);
+            // 1. Mit Defaultwerten starten
+            int floors = DefaultFloors;
+            double mass = DefaultMass;
+            double spring = DefaultSpring;
+            double damping = DefaultDamping;
+            double amp = DefaultAmplitude;
+            double freq = DefaultFrequency;
 
-                // 2) Bereichsprüfung
-                if (floors <= 0 || floors > MaxFloors)
-                    throw new ArgumentOutOfRangeException(
-                        nameof(floors),
-                        $"Stockwerke muss zwischen 1 und {MaxFloors} liegen.");
-                if (mass <= 0 || mass > MaxMass)
-                    throw new ArgumentOutOfRangeException(
-                        nameof(mass),
-                        $"Masse muss > 0 kg und ≤ {MaxMass} kg sein.");
-                if (spring <= 0 || spring > MaxSpring)
-                    throw new ArgumentOutOfRangeException(
-                        nameof(spring),
-                        $"Federkonstante muss > 0 N/m und ≤ {MaxSpring} N/m sein.");
-                if (damping < 0 || damping > MaxDamping)
-                    throw new ArgumentOutOfRangeException(
-                        nameof(damping),
-                        $"Dämpfung muss ≥ 0 Ns/m und ≤ {MaxDamping} Ns/m sein.");
+            // 2. Nur überschreiben, wenn gültig geparst
+            if (int.TryParse(txtFloors.Text, out int parsedFloors) && parsedFloors > 0 && parsedFloors <= MaxFloors)
+                floors = parsedFloors;
 
-                // 3) Zusätzliche Stabilitätsprüfung für RK4:
-                //    ω = sqrt(k/m), wir verlangen: ω·dt ≤ StabilityLimitZ0
-                double maxRatio = Math.Pow(StabilityLimitZ0 / dt, 2);
-                if (spring / mass > maxRatio)
-                    throw new ArgumentOutOfRangeException(
-                        nameof(spring),
-                        $"Das Verhältnis k/m ist zu hoch für eine stabile Simulation mit dt={dt}s. " +
-                        $"Erlaubt: k/m ≤ {maxRatio:F0}.");
+            if (double.TryParse(txtMass.Text, out double parsedMass) && parsedMass > 0 && parsedMass <= MaxMass)
+                mass = parsedMass;
 
-                // 4) Werte übernehmen
-                building = new Building(floors);
-                building.SetDefaultParameters(mass, spring, damping);
-                building.ResetState();
-                integrator = new RK4Integrator(building);
+            if (double.TryParse(txtSpring.Text, out double parsedSpring) && parsedSpring > 0 && parsedSpring <= MaxSpring)
+                spring = parsedSpring;
 
-                // Stabilitäts-Check
-                double omegaMax2 = Math.Pow(StabilityLimitZ0 / dt, 2);
-                if (spring / mass > omegaMax2)
-                    throw new ArgumentOutOfRangeException(
-                        nameof(spring),
-                        $"k/m ist zu groß für stabile Integration (k/m ≤ {omegaMax2:F0}).");
+            if (double.TryParse(txtDamping.Text, out double parsedDamping) && parsedDamping >= 0 && parsedDamping <= MaxDamping)
+                damping = parsedDamping;
 
-                // GUI updaten
-                visualisierung.Stockwerke = floors;
-                visualisierung.Positionen = building.Positions;
-                UpdateParameterLabels(floors, mass, spring, damping);
+            if (double.TryParse(txtAmp.Text, out double parsedAmp) && parsedAmp > 0)
+                amp = parsedAmp;
 
-                statusLamp.BackColor = Color.Green;
-                toolTip1.SetToolTip(statusLamp, "Simulation läuft");
-                MessageBox.Show(
-                    "Parameter wurden erfolgreich angepasst.",
-                    "OK",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information
-                );
-            }
-            catch (FormatException)
+            if (double.TryParse(txtFreq.Text, out double parsedFreq) && parsedFreq > 0)
+                freq = parsedFreq;
+
+            // 3. RK4-Stabilitätsprüfung
+            double maxRatio = Math.Pow(StabilityLimitZ0 / dt, 2);
+            if (spring / mass > maxRatio)
             {
                 MessageBox.Show(
-                    "Bitte nur Ziffern eingeben (keine Buchstaben oder Sonderzeichen).",
-                    "Ungültige Eingabe",
+                    $"Das Verhältnis k/m ist zu hoch für eine stabile Simulation mit dt={dt}s.\nErlaubt: k/m ≤ {maxRatio:F0}.",
+                    "Stabilitätsfehler",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error
                 );
+                return;
             }
-            catch (OverflowException)
+
+            // 4. Werte übernehmen
+            building = new Building(floors);
+            building.SetDefaultParameters(mass, spring, damping);
+            building.ResetState();
+            integrator = new RK4Integrator(building);
+
+            visualisierung.Stockwerke = floors;
+            visualisierung.Positionen = building.Positions;
+            UpdateParameterLabels(floors, mass, spring, damping);
+
+            // 5. Erregerfunktion setzen
+            excitationAmplitude = amp;
+            excitationFrequency = freq;
+
+            if (rbSinus.Checked)
             {
-                MessageBox.Show(
-                    "Die Zahl ist zu groß für den zulässigen Bereich.",
-                    "Ungültige Eingabe",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
+                erreger = ErregerFunktion.Sinus(amp, freq);
+                lblAktuell.Text = $"Aktuell: Sinus ({amp} / {freq} Hz)";
             }
-            catch (ArgumentOutOfRangeException ex)
+            else if (rbDoubleSinus.Checked)
             {
-                MessageBox.Show(
-                    ex.Message,
-                    "Wert außerhalb des erlaubten Bereichs",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
+                erreger = ErregerFunktion.DoubleSinus(amp, freq, 0.5 * amp, 2.0 * freq);
+                lblAktuell.Text = $"Aktuell: Double-Sinus";
             }
+            else if (rbSquare.Checked)
+            {
+                erreger = ErregerFunktion.Rechteckimpuls(amp, 1.0 / freq);
+                lblAktuell.Text = $"Aktuell: Rechteck (Amp: {amp}, Dauer: {1.0 / freq:F2} s)";
+            }
+
+            // 6. Feedback an Nutzer
+            statusLamp.BackColor = Color.Green;
+            toolTip1.SetToolTip(statusLamp, "Simulation läuft");
+            MessageBox.Show(
+                "Parameter wurden erfolgreich angepasst.",
+                "OK",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+
+            txtFloors.Text = "";
+            txtMass.Text = "";
+            txtSpring.Text = "";
+            txtDamping.Text = "";
+            txtAmp.Text = "";
+            txtFreq.Text = "";
+
         }
+
 
         private void timer1_Tick(object sender, EventArgs e)
         {
-            // Bodenbewegung berechnen...
-            double amplitude = 0.1;
-            double frequency = 1.0;
-            double omega = 2 * Math.PI * frequency;
-            double groundPos = amplitude * Math.Sin(omega * t);
-            double groundVel = amplitude * omega * Math.Cos(omega * t);
+            // Bodenbewegung berechnen
+            double groundPos = erreger?.Position(t) ?? 0.0;
+            double groundVel = erreger?.Velocity(t) ?? 0.0;
 
             try
             {
@@ -347,6 +367,29 @@ namespace Erdbebensim.Zusaammen_GUI___Vis_
         {
             // Leer
         }
+
+        private void RadioButton_CheckedChanged(object sender, EventArgs e)
+        {
+            if (!(sender is RadioButton rb) || !rb.Checked) return;
+
+            // Alte Logik: Zugriff auf txtAmp & txtFreq => WEG DAMIT!
+            // Wir tun hier erstmal nichts – die eigentliche Erregerfunktion wird erst bei "Apply" neu gesetzt.
+
+            if (rb == rbSinus)
+            {
+                lblAktuell.Text = "Ausgewählt: Sinus";
+            }
+            else if (rb == rbDoubleSinus)
+            {
+                lblAktuell.Text = "Ausgewählt: Double-Sinus";
+            }
+            else if (rb == rbSquare)
+            {
+                lblAktuell.Text = "Ausgewählt: Rechteckimpuls";
+            }
+        }
+
+
 
         private void vScrollBar1_Scroll(object sender, ScrollEventArgs e)
         {
